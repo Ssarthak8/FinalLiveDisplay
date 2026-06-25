@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "npm run build --workspace=@room-scheduler/shared-types",
     "dev": "vite",
+    "prebuild": "npm run build --workspace=@room-scheduler/shared-types",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"
   },
