@@ -284,6 +284,65 @@ export class ScheduleService {
   }
 
   /**
+   * Get today's or the nearest upcoming day's schedules for TV display.
+   */
+  static async getTodayOrUpcomingSchedules(userContext?: { userId: string; role: string }, timezone?: string): Promise<any> {
+    const today = getTodayDate(timezone);
+    const todaySchedules = await this.getToday(userContext, timezone);
+
+    if (todaySchedules && todaySchedules.length > 0) {
+      return {
+        displayedDate: today,
+        isUpcoming: false,
+        schedules: todaySchedules,
+      };
+    }
+
+    // Today is empty, search future dates in chronological order
+    const visibilityFilter = await this.getVisibilityFilter(userContext);
+    const earliestFutureSchedule = await Schedule.findOne({
+      date: { $gt: today },
+      ...visibilityFilter,
+    })
+      .sort({ date: 1 })
+      .lean();
+
+    if (earliestFutureSchedule) {
+      const futureDate = earliestFutureSchedule.date;
+      const schedules = await Schedule.find({
+        date: futureDate,
+        ...visibilityFilter,
+      })
+        .populate('roomId', 'roomNumber building capacity')
+        .populate('createdBy', 'name email phone department')
+        .sort({ startTime: 1 })
+        .lean();
+
+      let enriched = schedules.map((s) => ({
+        ...s,
+        status: getScheduleStatus(s.date, s.startTime, s.endTime, timezone),
+      }));
+
+      if (!userContext || userContext.role === 'viewer') {
+        enriched = enriched.map((s) => this.stripPrivacy(s));
+      }
+
+      return {
+        displayedDate: futureDate,
+        isUpcoming: true,
+        schedules: enriched,
+      };
+    }
+
+    // No future schedules exist
+    return {
+      displayedDate: today,
+      isUpcoming: false,
+      schedules: [],
+    };
+  }
+
+  /**
    * Get room availability for a specific date.
    */
   static async getRoomSchedules(roomId: string, date?: string, userContext?: { userId: string; role: string }, timezone?: string): Promise<any> {

@@ -41,6 +41,17 @@ router.get('/today', optionalAuthenticate, async (req: Request, res: Response, n
   }
 });
 
+// GET /api/schedules/tv-display — Public (for TV display)
+router.get('/tv-display', optionalAuthenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const timezone = req.headers['x-timezone'] as string | undefined;
+    const result = await ScheduleService.getTodayOrUpcomingSchedules(req.user, timezone);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/schedules/stats — Admin only
 router.get('/stats', authenticate, authorize('superadmin', 'admin'), async (req: Request, res: Response, next: NextFunction) => {
   try {

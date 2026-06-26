@@ -30,6 +30,17 @@ export function useTodaySchedules() {
   });
 }
 
+export function useTVDisplaySchedules() {
+  return useQuery({
+    queryKey: ['tv-display-schedules'],
+    queryFn: async () => {
+      const { data } = await api.get('/schedules/tv-display');
+      return data;
+    },
+    refetchInterval: 15000,
+  });
+}
+
 export function useDashboardStats() {
   return useQuery({
     queryKey: ['stats'],

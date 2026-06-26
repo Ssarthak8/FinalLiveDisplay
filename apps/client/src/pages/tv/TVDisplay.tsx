@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useTodaySchedules, useRooms, useActiveDisplayMedia, useActiveAnnouncements } from '@/hooks/useApi';
+import { useTVDisplaySchedules, useRooms, useActiveDisplayMedia, useActiveAnnouncements } from '@/hooks/useApi';
 import { useSocketEvents } from '@/hooks/useSocketEvents';
 import { cn } from '@/lib/utils';
 import {
@@ -9,7 +9,7 @@ import {
 
 export default function TVDisplay() {
   useSocketEvents();
-  const { data: todayData } = useTodaySchedules();
+  const { data: tvData } = useTVDisplaySchedules();
   const { data: rooms } = useRooms();
   const { data: displayMedia, isLoading: isLoadingMedia } = useActiveDisplayMedia();
   const { data: announcements } = useActiveAnnouncements();
@@ -64,7 +64,16 @@ export default function TVDisplay() {
   }, []);
 
   // Data parsing & sorting
-  const todaySchedules = todayData?.data || [];
+  const tvDataObj = tvData?.data;
+  const isUpcoming = tvDataObj?.isUpcoming || false;
+  const displayedDate = tvDataObj?.displayedDate;
+  const todaySchedules = tvDataObj?.schedules || [];
+
+  const formatDisplayDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year}`;
+  };
   const ongoingSchedules = todaySchedules.filter((s: any) => s.status === 'ongoing');
   const upcomingSchedules = todaySchedules.filter((s: any) => s.status === 'upcoming');
   const ongoingRoomIds = new Set(
@@ -289,18 +298,31 @@ export default function TVDisplay() {
 
           {/* Middle: Happening Now (Active Classes) */}
           <div className="flex-1 min-h-0 flex flex-col">
-            <div className="flex items-center gap-2 mb-2 px-1">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success-400 opacity-50" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-success-500" />
-              </span>
-              <h2 className="text-[11px] font-extrabold uppercase tracking-widest text-surface-400">
-                Happening Now
-              </h2>
-              {activeSchedules.length > 0 && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-success-950 text-success-400 border border-success-900/50 ml-auto">
-                  {ongoingSchedules.length} ongoing
+            <div className="flex flex-col mb-2 px-1 gap-1">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className={cn(
+                    'absolute inline-flex h-full w-full animate-ping rounded-full opacity-50',
+                    isUpcoming ? 'bg-primary-400' : 'bg-success-400'
+                  )} />
+                  <span className={cn(
+                    'relative inline-flex h-2 w-2 rounded-full',
+                    isUpcoming ? 'bg-primary-500' : 'bg-success-500'
+                  )} />
                 </span>
+                <h2 className="text-[11px] font-extrabold uppercase tracking-widest text-surface-400">
+                  {isUpcoming ? 'Upcoming Schedule' : 'Happening Now'}
+                </h2>
+                {activeSchedules.length > 0 && !isUpcoming && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-success-950 text-success-400 border border-success-900/50 ml-auto">
+                    {ongoingSchedules.length} ongoing
+                  </span>
+                )}
+              </div>
+              {isUpcoming && displayedDate && (
+                <div className="text-[11px] font-bold text-primary-400 tracking-wide pl-4">
+                  Date: {formatDisplayDate(displayedDate)}
+                </div>
               )}
             </div>
 
@@ -377,7 +399,7 @@ export default function TVDisplay() {
               <div className="flex-1 flex items-center justify-center bg-surface-900/20 border border-dashed border-surface-800/60 rounded-xl p-4">
                 <div className="text-center">
                   <Monitor className="w-8 h-8 text-surface-700 mx-auto mb-2" />
-                  <p className="text-sm font-bold text-surface-500">No events in progress</p>
+                  <p className="text-sm font-bold text-surface-500">No Upcoming Schedules</p>
                   <p className="text-xs text-surface-600 mt-0.5">Classes will show up here when active</p>
                 </div>
               </div>

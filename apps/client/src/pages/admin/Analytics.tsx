@@ -29,7 +29,9 @@ interface RoomStat {
   building: string;
   capacity: number;
   totalBookings: number;
+  bookedHours: number;
   totalHoursUsed: number;
+  availableHours: number;
   totalParticipants: number;
   occupancyPercentage: number | null; // null for capacity = 0
   utilizationPercentage: number;
@@ -115,7 +117,7 @@ function describeArc(x: number, y: number, radius: number, startAngle: number, e
 }
 
 export default function Analytics() {
-  const [rangeType, setRangeType] = useState<'week' | 'month' | 'lastMonth' | 'custom'>('week');
+  const [rangeType, setRangeType] = useState<'today' | 'week' | 'month' | 'lastMonth' | 'custom'>('week');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [roomCoordinator, setRoomCoordinator] = useState('All');
@@ -141,9 +143,15 @@ export default function Analytics() {
   const [isBatchesLoading, setIsBatchesLoading] = useState(false);
 
   // Helper: Get range dates
-  const calculateDates = (type: 'week' | 'month' | 'lastMonth' | 'custom') => {
+  const calculateDates = (type: 'today' | 'week' | 'month' | 'lastMonth' | 'custom') => {
     const today = new Date();
-    if (type === 'week') {
+    if (type === 'today') {
+      const todayStr = today.toISOString().split('T')[0];
+      return {
+        start: todayStr,
+        end: todayStr
+      };
+    } else if (type === 'week') {
       const day = today.getDay();
       const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Monday
       const mon = new Date(today.setDate(diff));
@@ -172,6 +180,7 @@ export default function Analytics() {
   };
 
   const activeLabel = (() => {
+    if (rangeType === 'today') return 'Today';
     if (rangeType === 'week') return 'This Week';
     if (rangeType === 'month') return 'This Month';
     if (rangeType === 'lastMonth') return 'Last Month';
@@ -215,6 +224,7 @@ export default function Analytics() {
           roomCoordinator: roomCoordinator === 'All' ? undefined : roomCoordinator,
           room: room === 'All' ? undefined : room,
           purpose: purpose === 'All' ? undefined : purpose,
+          rangeType,
         }
       });
       setData(response.data);
@@ -264,6 +274,7 @@ export default function Analytics() {
           roomCoordinator: roomCoordinator === 'All' ? undefined : roomCoordinator,
           room: room === 'All' ? undefined : room,
           purpose: purpose === 'All' ? undefined : purpose,
+          rangeType,
         },
         responseType: 'blob'
       });
@@ -393,9 +404,20 @@ export default function Analytics() {
               {/* Date range presets */}
               <div className="flex border border-surface-300 dark:border-surface-600 rounded-md overflow-hidden text-xs font-medium bg-white dark:bg-surface-850 shadow-sm">
                 <button
-                  onClick={() => setRangeType('week')}
+                  onClick={() => setRangeType('today')}
                   className={cn(
                     'px-3 py-1.5 transition-colors',
+                    rangeType === 'today'
+                      ? 'bg-surface-100 dark:bg-surface-700 text-surface-900 dark:text-white'
+                      : 'text-surface-500 hover:text-surface-750 hover:bg-surface-25 dark:hover:bg-surface-800'
+                  )}
+                >
+                  Today
+                </button>
+                <button
+                  onClick={() => setRangeType('week')}
+                  className={cn(
+                    'px-3 py-1.5 border-l border-surface-300 dark:border-surface-600 transition-colors',
                     rangeType === 'week'
                       ? 'bg-surface-100 dark:bg-surface-700 text-surface-900 dark:text-white'
                       : 'text-surface-500 hover:text-surface-750 hover:bg-surface-25 dark:hover:bg-surface-800'
@@ -727,7 +749,11 @@ export default function Analytics() {
                   <div className="relative w-48 h-48">
                     <svg width="192" height="192" viewBox="0 0 200 200" className="w-full h-full transform -rotate-90">
                       {pieSlices.length === 1 && pieSlices[0].share >= 99.9 ? (
-                        <circle cx="100" cy="100" r="80" fill={pieSlices[0].color} />
+                        <circle cx="100" cy="100" r="80" fill={pieSlices[0].color}>
+                          <title>{`${pieSlices[0].roomNumber}
+Booked Hours: ${pieSlices[0].hoursUsed} hrs
+Share of Total Hours: ${pieSlices[0].share}%`}</title>
+                        </circle>
                       ) : (
                         pieSlices.map((slice, i) => (
                           <path
@@ -736,7 +762,9 @@ export default function Analytics() {
                             fill={slice.color}
                             className="hover:opacity-90 transition-opacity cursor-pointer"
                           >
-                            <title>{slice.roomNumber}: {slice.share}%</title>
+                            <title>{`${slice.roomNumber}
+Booked Hours: ${slice.hoursUsed} hrs
+Share of Total Hours: ${slice.share}%`}</title>
                           </path>
                         ))
                       )}
@@ -771,10 +799,10 @@ export default function Analytics() {
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-surface-900 dark:text-white flex items-center gap-1.5">
                   <BarChart3 className="w-4 h-4 text-surface-400" />
-                  Hours Used Per Room (Bar Chart)
+                  Room Utilization (%)
                 </h2>
                 <span className="text-[10px] text-surface-400 font-semibold uppercase tracking-wider">
-                  Total hours
+                  Utilization
                 </span>
               </div>
 
@@ -783,39 +811,69 @@ export default function Analytics() {
                   <p className="text-xs text-surface-400 font-medium">No usage hours in range</p>
                 </div>
               ) : (
-                <div className="h-64 flex items-end gap-3 lg:gap-4 border-b border-l border-surface-200 dark:border-surface-700 pb-2 pl-2 overflow-x-auto">
-                  {(data?.roomStats || []).map((item) => {
-                    const heightPercent = maxHoursUsed > 0 ? (item.totalHoursUsed / maxHoursUsed) * 100 : 0;
-                    return (
-                      <div
-                        key={item.roomNumber}
-                        className="flex-1 min-w-[32px] flex flex-col items-center group relative h-full justify-end"
-                      >
-                        {/* Hours tag on hover */}
-                        <div className="absolute bottom-full mb-1 bg-surface-900 dark:bg-surface-950 text-white text-[10px] px-1.5 py-0.5 rounded shadow pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-10 whitespace-nowrap">
-                          {item.totalHoursUsed} hrs
-                        </div>
-                        
-                        {/* Bar */}
-                        <div
-                          style={{ height: `${heightPercent}%` }}
-                          className="w-full bg-primary-700 dark:bg-primary-550 rounded-t hover:bg-primary-600 dark:hover:bg-primary-450 transition-all duration-300 cursor-pointer min-h-[4px]"
-                        />
+                <div className="relative h-64 flex mt-2">
+                  {/* Y-Axis Labels */}
+                  <div className="flex flex-col justify-between text-[10px] text-surface-450 dark:text-surface-400 pr-2 pb-6 pt-1 text-right w-10 select-none shrink-0">
+                    <span>100%</span>
+                    <span>75%</span>
+                    <span>50%</span>
+                    <span>25%</span>
+                    <span>0%</span>
+                  </div>
 
-                        {/* Top Label when height permits */}
-                        {item.totalHoursUsed > 0 && (
-                          <span className="absolute bottom-full mb-1 text-[9px] font-bold text-primary-700 dark:text-primary-400 pointer-events-none group-hover:opacity-0 transition-opacity">
-                            {item.totalHoursUsed}
-                          </span>
-                        )}
+                  {/* Chart Area */}
+                  <div className="flex-1 relative h-full">
+                    {/* Grid lines */}
+                    <div className="absolute inset-y-0 left-0 right-0 flex flex-col justify-between pointer-events-none pb-6 pt-1">
+                      <div className="border-t border-dashed border-surface-150 dark:border-surface-800/80 w-full" />
+                      <div className="border-t border-dashed border-surface-150 dark:border-surface-800/80 w-full" />
+                      <div className="border-t border-dashed border-surface-150 dark:border-surface-800/80 w-full" />
+                      <div className="border-t border-dashed border-surface-150 dark:border-surface-800/80 w-full" />
+                      <div className="w-full" />
+                    </div>
 
-                        {/* Bottom label */}
-                        <span className="text-[10px] font-semibold text-surface-500 mt-2 truncate max-w-full text-center">
-                          {item.roomNumber}
-                        </span>
-                      </div>
-                    );
-                  })}
+                    {/* Bars container */}
+                    <div className="absolute inset-0 flex items-end gap-3 lg:gap-4 border-b border-l border-surface-200 dark:border-surface-700 pb-6 pl-2 overflow-x-auto h-full">
+                      {(data?.roomStats || []).map((item) => {
+                        const barHeight = Math.min(100, item.utilizationPercentage);
+                        return (
+                          <div
+                            key={item.roomNumber}
+                            className="flex-1 min-w-[36px] max-w-[60px] flex flex-col items-center group relative h-full justify-end"
+                          >
+                            {/* Hover Tooltip */}
+                            <div className="absolute bottom-full mb-2 bg-surface-900 dark:bg-surface-950 text-white text-xs p-2.5 rounded shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-25 whitespace-nowrap flex flex-col gap-1 border border-surface-700">
+                              <span className="font-bold border-b border-surface-700 pb-1 mb-1 text-surface-100">{item.roomNumber}</span>
+                              <span className="text-surface-300">Booked Hours: <strong className="text-white">{item.bookedHours} hrs</strong></span>
+                              <span className="text-surface-300">Available Hours: <strong className="text-white">{item.availableHours} hrs</strong></span>
+                              <span className="text-primary-400 font-semibold">Utilization: {item.utilizationPercentage}%</span>
+                            </div>
+                            
+                            {/* Bar */}
+                            <div
+                              style={{ height: `${barHeight}%` }}
+                              className="w-full bg-primary-700 dark:bg-primary-550 rounded-t hover:bg-primary-600 dark:hover:bg-primary-450 transition-all duration-300 cursor-pointer min-h-[4px]"
+                            />
+
+                            {/* Top numeric value label when height permits */}
+                            {item.utilizationPercentage > 0 && (
+                              <span
+                                style={{ bottom: `${barHeight}%` }}
+                                className="absolute mb-1 text-[9px] font-bold text-primary-700 dark:text-primary-400 pointer-events-none group-hover:opacity-0 transition-opacity whitespace-nowrap"
+                              >
+                                {item.utilizationPercentage}%
+                              </span>
+                            )}
+
+                            {/* Bottom label */}
+                            <span className="text-[10px] font-semibold text-surface-500 mt-2 truncate w-full text-center absolute bottom-0 select-none px-0.5">
+                              {item.roomNumber}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -836,7 +894,8 @@ export default function Analytics() {
                     <th>Building</th>
                     <th>Capacity</th>
                     <th>Total Bookings</th>
-                    <th>Total Hours Used</th>
+                    <th>Booked Hours</th>
+                    <th>Available Hours</th>
                     <th>Occupancy %</th>
                     <th>Utilization %</th>
                   </tr>
@@ -856,7 +915,8 @@ export default function Analytics() {
                         )}
                       </td>
                       <td className="tabular-nums">{item.totalBookings}</td>
-                      <td className="tabular-nums">{item.totalHoursUsed} hrs</td>
+                      <td className="tabular-nums">{item.bookedHours} hrs</td>
+                      <td className="tabular-nums">{item.availableHours} hrs</td>
                       <td className="font-semibold tabular-nums">
                         {item.occupancyPercentage === null ? (
                           <span className="text-surface-450 dark:text-surface-500 italic text-xs font-normal">
@@ -871,7 +931,7 @@ export default function Analytics() {
                           <span className="w-12 text-right">{item.utilizationPercentage}%</span>
                           <div className="w-24 h-1.5 bg-surface-100 dark:bg-surface-800 rounded-full overflow-hidden shrink-0">
                             <div
-                              style={{ width: `${item.utilizationPercentage}%` }}
+                              style={{ width: `${Math.min(100, item.utilizationPercentage)}%` }}
                               className="h-full bg-primary-750 dark:bg-primary-500 rounded-full"
                             />
                           </div>

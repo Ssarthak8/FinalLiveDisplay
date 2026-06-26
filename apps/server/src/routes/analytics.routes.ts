@@ -118,8 +118,35 @@ interface AnalyticsFilters {
   purpose?: string;
 }
 
+function getWorkingDays(startDateStr: string, endDateStr: string): number {
+  const [sYr, sMon, sDay] = startDateStr.split('-').map(Number);
+  const [eYr, eMon, eDay] = endDateStr.split('-').map(Number);
+  
+  const start = new Date(sYr, sMon - 1, sDay);
+  const end = new Date(eYr, eMon - 1, eDay);
+  
+  let count = 0;
+  const cur = new Date(start);
+  while (cur <= end) {
+    const dayOfWeek = cur.getDay(); // 0 is Sunday, 6 is Saturday
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      count++;
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
+function calculateAvailableHours(startDate: string, endDate: string, rangeType?: string): number {
+  if (rangeType === 'today' || startDate === endDate) {
+    return 8;
+  }
+  const workingDays = getWorkingDays(startDate, endDate);
+  return workingDays * 8;
+}
+
 // Common calculations function
-async function calculateStats(startDate: string, endDate: string, filters: AnalyticsFilters = {}) {
+async function calculateStats(startDate: string, endDate: string, filters: AnalyticsFilters = {}, rangeType?: string) {
   const dbRooms = await Room.find().lean();
   const dbRoomMap = new Map<string, any>();
   for (const r of dbRooms) {
@@ -134,11 +161,7 @@ async function calculateStats(startDate: string, endDate: string, filters: Analy
     date: { $gte: startDate, $lte: endDate }
   }).populate('roomId').lean();
 
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const timeDiff = end.getTime() - start.getTime();
-  const numDays = Math.max(1, Math.round(timeDiff / (1000 * 60 * 60 * 24)) + 1);
-  const availableHoursPerRoom = numDays * 12; // 8:00 AM - 8:00 PM (12 hours)
+  const availableHoursPerRoom = calculateAvailableHours(startDate, endDate, rangeType);
 
   interface RoomAccumulator {
     roomNumber: string;
@@ -318,7 +341,7 @@ async function calculateStats(startDate: string, endDate: string, filters: Analy
       : (stats.capacity === 0 ? null : 0);
 
     const utilizationPercentage = availableHoursPerRoom > 0 
-      ? Math.min(100, Math.round((stats.totalHoursUsed / availableHoursPerRoom) * 100))
+      ? Math.round((stats.totalHoursUsed / availableHoursPerRoom) * 10000) / 100
       : 0;
 
     roomStatsList.push({
@@ -327,7 +350,9 @@ async function calculateStats(startDate: string, endDate: string, filters: Analy
       building: stats.building,
       capacity: stats.capacity,
       totalBookings: stats.totalBookings,
+      bookedHours: Math.round(stats.totalHoursUsed * 10) / 10,
       totalHoursUsed: Math.round(stats.totalHoursUsed * 10) / 10,
+      availableHours: availableHoursPerRoom,
       totalParticipants: stats.totalParticipants,
       occupancyPercentage: avgOccupancy,
       utilizationPercentage
@@ -397,17 +422,22 @@ async function calculateStats(startDate: string, endDate: string, filters: Analy
 // GET /api/analytics - Fetch aggregate statistics
 router.get('/', authenticate, authorize('superadmin', 'admin'), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { startDate, endDate, roomCoordinator, room, purpose } = req.query;
+    const { startDate, endDate, roomCoordinator, room, purpose, rangeType } = req.query;
     if (!startDate || !endDate) {
       res.status(400).json({ success: false, message: 'startDate and endDate are required' });
       return;
     }
 
-    const stats = await calculateStats(startDate as string, endDate as string, {
-      roomCoordinator: roomCoordinator as string,
-      room: room as string,
-      purpose: purpose as string
-    });
+    const stats = await calculateStats(
+      startDate as string,
+      endDate as string,
+      {
+        roomCoordinator: roomCoordinator as string,
+        room: room as string,
+        purpose: purpose as string
+      },
+      rangeType as string
+    );
 
     // Dynamically fetch unique coordinators
     const [schedCoordinators, histCoordinators] = await Promise.all([
@@ -654,17 +684,22 @@ function formatTimeTo12Hour(t: string): string {
 // GET /api/analytics/export - Export Excel utilization report
 router.get('/export', authenticate, authorize('superadmin', 'admin'), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { startDate, endDate, roomCoordinator, room, purpose } = req.query;
+    const { startDate, endDate, roomCoordinator, room, purpose, rangeType } = req.query;
     if (!startDate || !endDate) {
       res.status(400).json({ success: false, message: 'startDate and endDate are required' });
       return;
     }
 
-    const stats = await calculateStats(startDate as string, endDate as string, {
-      roomCoordinator: roomCoordinator as string,
-      room: room as string,
-      purpose: purpose as string
-    });
+    const stats = await calculateStats(
+      startDate as string,
+      endDate as string,
+      {
+        roomCoordinator: roomCoordinator as string,
+        room: room as string,
+        purpose: purpose as string
+      },
+      rangeType as string
+    );
 
     const historicalBookings = await HistoricalBooking.find({
       date: { $gte: startDate, $lte: endDate }
@@ -688,13 +723,14 @@ router.get('/export', authenticate, authorize('superadmin', 'admin'), async (req
     const wb = XLSX.utils.book_new();
 
     // Sheet 1: Room Statistics
-    const sheet1Headers = ['Room Name', 'Capacity', 'Total Bookings', 'Total Hours Used', 'Total Participants', 'Occupancy %'];
+    const sheet1Headers = ['Room Name', 'Capacity', 'Total Bookings', 'Booked Hours', 'Available Hours', 'Utilization %', 'Occupancy %'];
     const sheet1Rows = stats.roomStats.map((item) => [
       item.roomNumber,
       item.capacity === 0 ? 'Unknown Capacity' : item.capacity,
       item.totalBookings,
-      item.totalHoursUsed,
-      item.totalParticipants,
+      item.bookedHours,
+      item.availableHours,
+      `${item.utilizationPercentage}%`,
       item.capacity === 0 ? 'Unknown Capacity' : `${item.occupancyPercentage}%`
     ]);
     const ws1 = XLSX.utils.aoa_to_sheet([sheet1Headers, ...sheet1Rows]);
