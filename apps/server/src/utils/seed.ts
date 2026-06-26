@@ -3,6 +3,8 @@ import { User } from '../models/User.js';
 import { Room } from '../models/Room.js';
 import { Schedule } from '../models/Schedule.js';
 import { connectDB } from '../config/db.js';
+import { fileURLToPath } from 'url';
+import path from 'path';
 
 export async function seedData() {
   console.log('🌱 Seeding database...\n');
@@ -199,7 +201,17 @@ async function run() {
 }
 
 // Only run if executing directly
-if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}`) {
+const isDirectRun = () => {
+  try {
+    const currentFilePath = fileURLToPath(import.meta.url);
+    const executedFilePath = path.resolve(process.argv[1]);
+    return currentFilePath === executedFilePath;
+  } catch {
+    return false;
+  }
+};
+
+if (isDirectRun()) {
   run().catch((error) => {
     console.error('❌ Seeding failed:', error);
     process.exit(1);

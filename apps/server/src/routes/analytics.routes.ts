@@ -307,7 +307,6 @@ async function calculateStats(startDate: string, endDate: string, filters: Analy
   // Compute aggregate metrics
   let totalBookings = 0;
   let totalHoursUsed = 0;
-  let totalParticipants = 0;
   let totalOccupancySum = 0;
   let totalOccupancyCount = 0;
 
@@ -336,7 +335,6 @@ async function calculateStats(startDate: string, endDate: string, filters: Analy
 
     totalBookings += stats.totalBookings;
     totalHoursUsed += stats.totalHoursUsed;
-    totalParticipants += stats.totalParticipants;
     totalOccupancySum += stats.occupancySum;
     totalOccupancyCount += stats.occupancyCount;
   }
@@ -386,7 +384,6 @@ async function calculateStats(startDate: string, endDate: string, filters: Analy
     summary: {
       totalBookings,
       totalHoursUsed: Math.round(totalHoursUsed * 10) / 10,
-      totalParticipants,
       mostUsedRoom,
       highestOccupancyRoom,
       averageOccupancyPercentage: averageOccupancyPercent,

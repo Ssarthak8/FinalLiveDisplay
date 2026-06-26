@@ -38,7 +38,6 @@ interface RoomStat {
 interface Summary {
   totalBookings: number;
   totalHoursUsed: number;
-  totalParticipants: number;
   mostUsedRoom: {
     roomNumber: string;
     building: string;
@@ -550,7 +549,7 @@ export default function Analytics() {
       ) : (
         <>
           {/* KPI Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 animate-fade-in">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 animate-fade-in">
             {/* 1. Total Bookings */}
             <div className="kpi-card kpi-card-blue">
               <div className="flex justify-between items-start">
@@ -579,20 +578,7 @@ export default function Analytics() {
               </div>
             </div>
 
-            {/* 3. Total Participants */}
-            <div className="kpi-card kpi-card-indigo" style={{ borderLeftColor: 'var(--color-primary-600)' }}>
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="kpi-value">{data?.summary.totalParticipants || 0}</div>
-                  <div className="kpi-label">Total Participants</div>
-                </div>
-                <div className="kpi-icon text-primary-750 bg-primary-50 dark:bg-primary-950/20">
-                  <Users className="w-4 h-4" />
-                </div>
-              </div>
-            </div>
-
-            {/* 4. Most Used Room */}
+            {/* 3. Most Used Room */}
             <div className="kpi-card kpi-card-amber">
               <div className="flex justify-between items-start">
                 <div>
@@ -851,7 +837,6 @@ export default function Analytics() {
                     <th>Capacity</th>
                     <th>Total Bookings</th>
                     <th>Total Hours Used</th>
-                    <th>Total Participants</th>
                     <th>Occupancy %</th>
                     <th>Utilization %</th>
                   </tr>
@@ -872,7 +857,6 @@ export default function Analytics() {
                       </td>
                       <td className="tabular-nums">{item.totalBookings}</td>
                       <td className="tabular-nums">{item.totalHoursUsed} hrs</td>
-                      <td className="tabular-nums">{item.totalParticipants}</td>
                       <td className="font-semibold tabular-nums">
                         {item.occupancyPercentage === null ? (
                           <span className="text-surface-450 dark:text-surface-500 italic text-xs font-normal">
